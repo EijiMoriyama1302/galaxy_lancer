@@ -134,6 +134,9 @@ class Position:
     def set(self, x, y):
         self.x = x
         self.y = y
+    
+    def get_distance(self, target:"Position"):
+        return( (self.x-target.x)*(self.x-target.x) + (self.y-target.y)*(self.y-target.y) )
 
 
 class Transform:
@@ -330,6 +333,103 @@ class effect:
             self.draw(i, scrn)
 
 
+class EnemyChara:
+    def __init__(self):
+        self.emy_f = False
+        self.transform = Transform()
+        self.emy_type = 0
+        self.emy_shield = 0
+        self.emy_count = 0
+        self.width = 0
+        self.height = 0
+        self.boss_state = 0
+    
+    def set(self, x:int, y:int, angle:int, speed:int, type:int, shield:int, width:int, height:int):
+        self.emy_f = True
+        self.transform.set_position(x, y, angle, speed)
+        self.emy_type = type
+        self.emy_shield = shield
+        self.emy_count = 0
+        self.width = width
+        self.height = height
+    
+    def clear(self):
+        self.emy_f = False
+    
+    def move(self):
+        self.transform.move()
+        if self.transform.position.x < LINE_L or LINE_R < self.transform.position.x or self.transform.position.y < LINE_T or LINE_B < self.transform.position.y:
+            self.clear()
+    
+    def move_boss(self, tmr):
+        shot = 0
+        if self.boss_state == 0:
+            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_DOWN, 2)
+            self.transform.move()
+            if self.transform.position.y >= 200:
+                self.boss_state = 1
+        elif self.boss_state == 1:
+            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_LEFT, self.transform.speed)
+            self.transform.move()
+            if self.transform.position.x < 200:
+                shot = 2
+                self.boss_state = 2
+        else:
+            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_RIGHT, self.transform.speed)
+            self.transform.move()
+            if self.transform.position.x > 760:
+                shot = 2
+                self.boss_state = 1
+            if self.emy_shield < 100 and tmr%30 == 0:
+                shot = 1
+        return shot
+    
+    def has_hit_and_run(self):
+        if self.emy_type == 4: #進行方向を変える敵
+            if self.transform.position.y > 240 and self.transform.direction == DIRECTION_DOWN:
+                self.transform.direction = random.choice([50,70,110,130])
+                return True
+        return False
+    
+    def get_hit_area(self):
+        r = int((self.width+self.height)/4)+12
+        return r
+    
+    def has_hit_player(self, player:Position):
+        if self.emy_f == True:
+            r = int((self.width+self.height)/4 + (74+96)/4)
+            if self.transform.get_distance(player) < r*r:
+                if self.emy_type < EMY_BOSS:
+                    self.clear()
+                return True
+        return False
+
+    def explode(self, eff:effect):
+        er = int((self.width+self.height)/4)
+        eff.set_effect(self.transform.position.x+random.randint(-er, er), self.transform.position.y+random.randint(-er, er))
+    
+    def draw(self, scrn, image):
+        self.emy_count = self.emy_count + 1
+        if self.emy_type == 4: #進行方向を変える敵
+            ang = self.emy_count*10
+        else:
+            ang = -90-self.transform.direction
+        img_rz = pygame.transform.rotozoom(image, ang, 1.0)
+        scrn.blit(img_rz, [self.transform.position.x-img_rz.get_width()/2, self.transform.position.y-img_rz.get_height()/2])
+    
+    def is_defeat(self):
+        self.emy_shield = self.emy_shield - 1
+        if self.emy_shield == 0:
+            self.clear()
+            return True
+        return False
+    
+    def get_shoot_param(self, direction:int):
+        transform = Transform()
+        transform.set_position(self.transform.position.x, self.transform.position.y, direction, 6)
+        return transform
+
+
 class enemy:
     def __init__(self):
         self.img_enemy = [
@@ -343,28 +443,54 @@ class enemy:
         ]
         self.ENEMY_MAX = 100
         self.emy_no = 0
-        self.emy_f = [False]*self.ENEMY_MAX
-        self.transform = [Transform() for _ in range(self.ENEMY_MAX)]
-        self.emy_type = [0]*self.ENEMY_MAX
-        self.emy_shield = [0]*self.ENEMY_MAX
-        self.emy_count = [0]*self.ENEMY_MAX
+        self.charactor = [EnemyChara() for _ in range(self.ENEMY_MAX)]
         self.boss_defeated = False
         self.se_explosion = pygame.mixer.Sound("sound_gl/explosion.ogg")
 
     def bring(self, tmr): #敵を出す
         sec = tmr/30
+        if 0 < sec and sec < 25: #スタートして25秒間
+            if tmr%15 == 0:
+                self.set_enemy(random.randint(20, 940), LINE_T, DIRECTION_DOWN, EMY_ZAKO, 8, 1) #敵1
+        if 30 < sec and sec < 55: # 30～55秒
+            if tmr%10 == 0:
+                self.set_enemy(random.randint(20, 940), LINE_T, DIRECTION_DOWN, EMY_ZAKO+1, 12, 1) #敵2
+        if 60 < sec and sec < 85: # 60～85秒
+            if tmr%15 == 0:
+                self.set_enemy(random.randint(100, 860), LINE_T, random.randint(60, 120), EMY_ZAKO+2, 6, 3) #敵3
+        if 90 < sec and sec < 115: # 90～115秒
+            if tmr%20 == 0:
+                self.set_enemy(random.randint(100, 860), LINE_T, DIRECTION_DOWN, EMY_ZAKO+3, 12, 2) #敵4
+        if 120 < sec and sec < 145: # 120～145秒 2種類
+            if tmr%20 == 0:
+                self.set_enemy(random.randint(20, 940), LINE_T, DIRECTION_DOWN, EMY_ZAKO, 8, 1) #敵1
+                self.set_enemy(random.randint(100, 860), LINE_T, random.randint(60, 120), EMY_ZAKO+2, 6, 3) #敵3
+        if 150 < sec and sec < 175: # 150～175秒 2種類
+            if tmr%20 == 0:
+                self.set_enemy(random.randint(20, 940), LINE_B, DIRECTION_UP, EMY_ZAKO, 8, 1) #敵1 下から上に
+                self.set_enemy(random.randint(20, 940), LINE_T, random.randint(70, 110), EMY_ZAKO+1, 12, 1) #敵2
+        if 180 < sec and sec < 205: # 180～205秒 2種類
+            if tmr%20 == 0:
+                self.set_enemy(random.randint(100, 860), LINE_T, random.randint(60, 120), EMY_ZAKO+2, 6, 3) #敵3
+                self.set_enemy(random.randint(100, 860), LINE_T, DIRECTION_DOWN, EMY_ZAKO+3, 12, 2) #敵4
+        if 210 < sec and sec < 235: # 210～235秒 2種類
+            if tmr%20 == 0:
+                self.set_enemy(LINE_L, random.randint(40, 680), DIRECTION_RIGHT, EMY_ZAKO, 12, 1) #敵1
+                self.set_enemy(LINE_R, random.randint(40, 680), DIRECTION_LEFT, EMY_ZAKO+1, 18, 1) #敵2
+        if 240 < sec and sec < 265: # 240～265秒 総攻撃
+            if tmr%30 == 0:
+                self.set_enemy(random.randint(20, 940), LINE_T, DIRECTION_DOWN, EMY_ZAKO, 8, 1) #敵1
+                self.set_enemy(random.randint(20, 940), LINE_T, DIRECTION_DOWN, EMY_ZAKO+1, 12, 1) #敵2
+                self.set_enemy(random.randint(100, 860), LINE_T, random.randint(60, 120), EMY_ZAKO+2, 6, 3) #敵3
+                self.set_enemy(random.randint(100, 860), LINE_T, DIRECTION_DOWN, EMY_ZAKO+3, 12, 2) #敵4
 
-        if tmr == 30: #ボス出現
+        if tmr == 30*270: #ボス出現
             self.set_enemy(480, -210, DIRECTION_DOWN, EMY_BOSS, 4, 200)
 
     def set_enemy(self, x, y, a, ty, sp, sh): #敵機をセットする
         while True:
-            if self.emy_f[self.emy_no] == False:
-                self.emy_f[self.emy_no] = True
-                self.transform[self.emy_no].set_position(x, y, a, sp)
-                self.emy_type[self.emy_no] = ty
-                self.emy_shield[self.emy_no] = sh
-                self.emy_count[self.emy_no] = 0
+            if self.charactor[self.emy_no].emy_f == False:
+                self.charactor[self.emy_no].set(x, y, a, sp, ty, sh, self.img_enemy[ty].get_width(), self.img_enemy[ty].get_height())
                 break
             self.emy_no = (self.emy_no+1)%self.ENEMY_MAX
     
@@ -375,108 +501,60 @@ class enemy:
         for j in range(0, 10):
             self.set_enemy(x, y, j*20, EMY_BULLET, 6, 0)
 
-    def move_zako(self, i):
-        self.transform[i].move()
-        if self.emy_type[i] == 4: #進行方向を変える敵
-            self.emy_count[i] = self.emy_count[i] + 1
-            ang = self.emy_count[i]*10
-            if self.transform[i].position.y > 240 and self.transform[i].direction == DIRECTION_DOWN:
-                self.transform[i].direction = random.choice([50,70,110,130])
-                self.shoot_once(self.transform[i].position.x, self.transform[i].position.y, DIRECTION_DOWN)
-        if self.transform[i].position.x < LINE_L or LINE_R < self.transform[i].position.x or self.transform[i].position.y < LINE_T or LINE_B < self.transform[i].position.y:
-            self.emy_f[i] = False
-    
-    def move_boss(self, i, tmr):
-        if self.emy_count[i] == 0:
-            self.transform[i].set_position(self.transform[i].position.x, self.transform[i].position.y, DIRECTION_DOWN, 2)
-            self.transform[i].move()
-            if self.transform[i].position.y >= 200:
-                self.emy_count[i] = 1
-        elif self.emy_count[i] == 1:
-            self.transform[i].set_position(self.transform[i].position.x, self.transform[i].position.y, DIRECTION_LEFT, self.transform[i].speed)
-            self.transform[i].move()
-            if self.transform[i].position.x < 200:
-                self.shoot_barrage(self.transform[i].position.x, self.transform[i].position.y+80)
-                self.emy_count[i] = 2
-        else:
-            self.transform[i].set_position(self.transform[i].position.x, self.transform[i].position.y, DIRECTION_RIGHT, self.transform[i].speed)
-            self.transform[i].move()
-            if self.transform[i].position.x > 760:
-                self.shoot_barrage(self.transform[i].position.x, self.transform[i].position.y+80)
-                self.emy_count[i] = 1
-            if self.emy_shield[i] < 100 and tmr%30 == 0:
-                self.shoot_once(self.transform[i].position.x, self.transform[i].position.y+80, random.randint(60, 120))
-    
-    def is_hit_by_missile(self, i, msl):
-        w = self.img_enemy[self.emy_type[i]].get_width()
-        h = self.img_enemy[self.emy_type[i]].get_height()
-        r = int((w+h)/4)+12
-        if msl.has_hit_enemy(self.transform[i].position, r):
-            return True
-        return False
-    
-    def explode(self, i, eff):
-        w = self.img_enemy[self.emy_type[i]].get_width()
-        h = self.img_enemy[self.emy_type[i]].get_height()
-        er = int((w+h)/4)
-        eff.set_effect(self.transform[i].position.x+random.randint(-er, er), self.transform[i].position.y+random.randint(-er, er))
-    
     def defeat_boss(self, i, eff):
         self.boss_defeated = True
         for j in range(10):
-            self.explode(i, eff)
+            self.charactor[i].explode(eff)
         self.se_explosion.play()
     
     def draw(self, i, scrn, flash:bool):
-        if self.emy_type[i] == EMY_BOSS:
+        if self.charactor[i].emy_type == EMY_BOSS:
             ang = DIRECTION_UP-DIRECTION_DOWN
+            png = self.charactor[i].emy_type
+            if flash:
+                png = EMY_BOSS + 1
+            img_rz = pygame.transform.rotozoom(self.img_enemy[png], ang, 1.0)
+            scrn.blit(img_rz, [self.charactor[i].transform.position.x-img_rz.get_width()/2, self.charactor[i].transform.position.y-img_rz.get_height()/2])
         else:
-            ang = -90-self.transform[i].direction
-        png = self.emy_type[i]
-        if flash:
-            png = EMY_BOSS + 1
-        img_rz = pygame.transform.rotozoom(self.img_enemy[png], ang, 1.0)
-        scrn.blit(img_rz, [self.transform[i].position.x-img_rz.get_width()/2, self.transform[i].position.y-img_rz.get_height()/2])
+            self.charactor[i].draw(scrn, self.img_enemy[self.charactor[i].emy_type])
     
-    def action(self ,scrn ,msl:missile ,eff:effect, shield:shield, score:score, tmr, idx): #敵機の移動
+    def action(self ,scrn ,msl:missile ,eff:effect, shield:shield, score:score, tmr, inplay:bool): #敵機の移動
         for i in range(self.ENEMY_MAX):
-            if self.emy_f[i] == True:
+            if self.charactor[i].emy_f == True:
                 flash = False
-                if self.emy_type[i] < EMY_BOSS: #ザコの動き
-                    self.move_zako(i)
+                if self.charactor[i].emy_type < EMY_BOSS: #ザコの動き
+                    if self.charactor[i].has_hit_and_run():
+                        self.shoot_once(self.charactor[i].transform.position.x, self.charactor[i].transform.position.y, DIRECTION_DOWN)
+                    self.charactor[i].move()
                 else: #ボスの動き
-                    self.move_boss(i, tmr)
+                    shot = self.charactor[i].move_boss(tmr)
+                    if shot == 1:
+                        self.shoot_once(self.charactor[i].transform.position.x, self.charactor[i].transform.position.y+80, random.randint(60, 120))
+                    elif shot == 2:
+                        self.shoot_barrage(self.charactor[i].transform.position.x, self.charactor[i].transform.position.y+80)
                 
-                if self.emy_type[i] != EMY_BULLET: #プレイヤーと玉とのヒットチェック
-                    if self.is_hit_by_missile(i, msl):
-                        self.explode(i, eff)
-                        if self.emy_type[i] == EMY_BOSS: #ボスはフラッシュさせる
+                if self.charactor[i].emy_type != EMY_BULLET: #プレイヤーと玉とのヒットチェック
+                    if msl.has_hit_enemy(self.charactor[i].transform.position, self.charactor[i].get_hit_area()):
+                        self.charactor[i].explode(eff)
+                        if self.charactor[i].emy_type == EMY_BOSS: #ボスはフラッシュさせる
                             flash = True
-                        self.emy_shield[i] = self.emy_shield[i] - 1
                         score.up(100)
-                        if self.emy_shield[i] == 0:
-                            self.emy_f[i] = False
+                        if self.charactor[i].is_defeat():
                             shield.heal()
-                            if self.emy_type[i] == EMY_BOSS and idx == 1: #ボスを倒すとクリア
+                            if self.charactor[i].emy_type == EMY_BOSS and inplay: #ボスを倒すとクリア
                                 self.defeat_boss(i, eff)
                     
                 self.draw(i, scrn, flash)
     
     def has_hit_player(self ,player:Position):
         for i in range(self.ENEMY_MAX): #敵とのヒットチェック
-            if self.emy_f[i] == True:
-                w = self.img_enemy[self.emy_type[i]].get_width()
-                h = self.img_enemy[self.emy_type[i]].get_height()
-                r = int((w+h)/4 + (74+96)/4)
-                if self.transform[i].get_distance(player) < r*r:
-                    if self.emy_type[i] < EMY_BOSS:
-                        self.emy_f[i] = False
-                    return True
+            if self.charactor[i].has_hit_player(player):
+                return True
         return False
     
     def clear(self):
         for i in range(self.ENEMY_MAX):
-            self.emy_f[i] = False
+            self.charactor[i].clear()
         self.boss_defeated = False
     
     def is_boss_defeated(self):
@@ -550,7 +628,7 @@ def main(): #メインループ
                     ss.take_damage()
             msl.action(screen)
             emy.bring(tmr)
-            emy.action(screen,msl,eff,sld,scr,tmr,idx)
+            emy.action(screen,msl,eff,sld,scr,tmr,True)
             if emy.is_boss_defeated():
                 idx = 3
                 tmr = 0
@@ -558,7 +636,7 @@ def main(): #メインループ
         
         if idx == 2: #ゲームオーバー
             msl.action(screen)
-            emy.action(screen,msl,eff,sld,scr,tmr,idx)
+            emy.action(screen,msl,eff,sld,scr,tmr,False)
             if tmr == 1:
                 pygame.mixer.music.stop()
             if tmr <= 90:
