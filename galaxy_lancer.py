@@ -150,12 +150,51 @@ class Transform:
         self.direction = direction
         self.speed = speed
 
+    def change_moving(self, direction:int, speed:int):
+        self.direction = direction
+        self.speed = speed
+
     def move(self):
         self.position.x = self.position.x + self.speed * math.cos(math.radians(self.direction))
         self.position.y = self.position.y + self.speed * math.sin(math.radians(self.direction))
 
     def get_distance(self, target:Position):
         return( (self.position.x-target.x)*(self.position.x-target.x) + (self.position.y-target.y)*(self.position.y-target.y) )
+
+
+class Charactor:
+    def __init__(self):
+        self.transform = Transform()
+        self.now_disp = False
+    
+    def set(self, x, y, direction, speed):
+        self.transform.set_position(x, y, direction, speed)
+        self.now_disp = True
+    
+    def clear(self):
+        self.now_disp = False
+    
+    def move(self):
+        if self.now_disp:
+            self.transform.move()
+
+    def is_out_of_display(self):
+        if self.now_disp and self.transform.position.x < LINE_L or LINE_R < self.transform.position.x or self.transform.position.y < LINE_T or LINE_B < self.transform.position.y:
+            return True
+        return False
+    
+    def change_moving(self, direction:int, speed:int):
+        if self.now_disp:
+            self.transform.change_moving(direction, speed)
+    
+    def draw(self, screen, img, direction:int):
+        if self.now_disp:
+            img_rz = pygame.transform.rotozoom(img, -90-direction, 1.0)
+            screen.blit(img_rz, [self.transform.position.x-img_rz.get_width()/2, self.transform.position.y-img_rz.get_height()/2])
+    
+    def has_hit_target(self, target:Position, r):
+        if self.now_disp and self.transform.get_distance(target) < r*r:
+            return True
 
 
 class player:
@@ -167,62 +206,69 @@ class player:
             pygame.image.load("image_gl/starship_r.png"),
             pygame.image.load("image_gl/starship_burner.png")
         ]
-        self.transform = Transform()
+        self.charactor = Charactor()
         self.ss_d = 0
         self.key_spc = 0
         self.key_z = 0
         self.ss_muteki = 0
         self.se_damage = pygame.mixer.Sound("sound_gl/damage.ogg")
     
+    def initialize(self):
+        self.charactor.set(480, 600, DIRECTION_UP, 20)
+        self.ss_d = 0
+        self.ss_muteki = 0
+    
+    def hide(self):
+        self.charactor.clear()
+    
     def move(self, key):
         self.ss_d = 0
         if key[pygame.K_UP] == 1:
-            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_UP, 20)
-            self.transform.move()
-            if self.transform.position.y < 80:
-                self.transform.position.y = 80
+            self.charactor.change_moving(DIRECTION_UP, 20)
+            self.charactor.move()
+            if self.charactor.transform.position.y < 80:
+                self.charactor.transform.position.y = 80
         if key[pygame.K_DOWN] == 1:
-            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_DOWN, 20)
-            self.transform.move()
-            if self.transform.position.y > 640:
-                self.transform.position.y = 640
+            self.charactor.change_moving(DIRECTION_DOWN, 20)
+            self.charactor.move()
+            if self.charactor.transform.position.y > 640:
+                self.charactor.transform.position.y = 640
         if key[pygame.K_LEFT] == 1:
             self.ss_d = 1
-            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_LEFT, 20)
-            self.transform.move()
-            if self.transform.position.x < 40:
-                self.transform.position.x = 40
+            self.charactor.change_moving(DIRECTION_LEFT, 20)
+            self.charactor.move()
+            if self.charactor.transform.position.x < 40:
+                self.charactor.transform.position.x = 40
         if key[pygame.K_RIGHT] == 1:
             self.ss_d = 2
-            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_RIGHT, 20)
-            self.transform.move()
-            if self.transform.position.x > 920:
-                self.transform.position.x = 920
+            self.charactor.change_moving(DIRECTION_RIGHT, 20)
+            self.charactor.move()
+            if self.charactor.transform.position.x > 920:
+                self.charactor.transform.position.x = 920
+    
+    def get_shoot_position(self):
+        position = Position()
+        position.set(self.charactor.transform.position.x, self.charactor.transform.position.y-50)
+        return position
     
     def shoot_missile(self, key, missile, shield):
         self.key_spc = (self.key_spc+1)*key[K_SPACE]
         if self.key_spc%5 == 1:
-            missile.shoot_once(self.transform.position.x,self.transform.position.y)
+            missile.shoot_once(self.get_shoot_position())
         self.key_z = (self.key_z+1)*key[K_z]
         if self.key_z == 1 and shield.can_shoot_barrage():
-            missile.shoot_barrage(self.transform.position.x,self.transform.position.y)
+            missile.shoot_barrage(self.get_shoot_position())
             shield.down()
     
     def draw(self, scrn, tmr):
         if self.ss_muteki%2 == 0:
-            scrn.blit(self.img_sship[3], [self.transform.position.x-8, self.transform.position.y+40+(tmr%3)*2])
-            scrn.blit(self.img_sship[self.ss_d], [self.transform.position.x-37, self.transform.position.y-48])
+            scrn.blit(self.img_sship[3], [self.charactor.transform.position.x-8, self.charactor.transform.position.y+40+(tmr%3)*2])
+            self.charactor.draw(scrn, self.img_sship[self.ss_d], DIRECTION_UP)
 
     def action(self, scrn, key, missile, shield, tmr): #自機の移動
         self.move(key)
         self.shoot_missile(key, missile, shield)
         self.draw(scrn, tmr)
-    
-    def initialize(self):
-        self.transform.position.x = 480
-        self.transform.position.y = 600
-        self.ss_d = 0
-        self.ss_muteki = 0
     
     def is_muteki(self):
         if self.ss_muteki > 0:
@@ -231,7 +277,7 @@ class player:
         return False
     
     def set_effect(self, effect): 
-        effect.set_effect(self.transform.position.x, self.transform.position.y)
+        effect.set_effect(self.charactor.transform.position.x, self.charactor.transform.position.y)
     
     def take_damage(self):
         if self.ss_muteki == 0:
@@ -240,7 +286,7 @@ class player:
     
     def explode(self, effect, tmr):
         if tmr%5 == 0:
-            effect.set_effect(self.transform.position.x+random.randint(-60,60), self.transform.position.y+random.randint(-60,60))
+            effect.set_effect(self.charactor.transform.position.x+random.randint(-60,60), self.charactor.transform.position.y+random.randint(-60,60))
         if tmr%10 == 0:
             self.se_damage.play()
 
@@ -250,55 +296,40 @@ class missile:
         self.img_weapon = pygame.image.load("image_gl/bullet.png")
         self.MISSILE_MAX = 200
         self.msl_no = 0
-        self.msl_f = [False]*self.MISSILE_MAX
-        self.transform = [Transform() for _ in range(self.MISSILE_MAX)]
+        self.charactor = [Charactor() for _ in range(self.MISSILE_MAX)]
         self.se_shot = pygame.mixer.Sound("sound_gl/shot.ogg")
         self.se_barrage = pygame.mixer.Sound("sound_gl/barrage.ogg")
     
     def set(self, x, y, direction):
-        self.msl_f[self.msl_no] = True
-        self.transform[self.msl_no].set_position(x, y, direction, 36)
+        self.charactor[self.msl_no].set(x, y, direction, 36)
         self.msl_no = (self.msl_no+1)%self.MISSILE_MAX
 
-    def shoot_once(self,ss_x,ss_y):
-        self.set(ss_x, ss_y-50, DIRECTION_UP)
+    def shoot_once(self, position:Position):
+        self.set(position.x, position.y, DIRECTION_UP)
         self.se_shot.play()
 
-    def shoot_barrage(self,ss_x,ss_y):
+    def shoot_barrage(self, position:Position):
         for a in range(160, 390, 10):
-            self.set(ss_x, ss_y-50, a)
+            self.set(position.x, position.y, a)
         self.se_barrage.play()
     
-    def move(self, i):
-        self.transform[i].move()
-        if self.is_out_of_display(i):
-            self.msl_f[i] = False
-    
-    def draw(self, i ,scrn):
-        self.img_rz = pygame.transform.rotozoom(self.img_weapon, -90-self.transform[i].direction, 1.0)
-        scrn.blit(self.img_rz, [self.transform[i].position.x-self.img_rz.get_width()/2, self.transform[i].position.y-self.img_rz.get_height()/2])
-
     def action(self, scrn): #球の移動
         for i in range(self.MISSILE_MAX):
-            if self.msl_f[i] == True:
-                self.move(i)
-                self.draw(i,scrn)
+            self.charactor[i].transform.move()
+            if self.charactor[i].is_out_of_display():
+                self.charactor[i].clear()
+            self.charactor[i].draw(scrn, self.img_weapon, self.charactor[i].transform.direction)
     
     def has_hit_enemy(self, target:Position, r):
         for n in range(self.MISSILE_MAX):
-            if self.msl_f[n] == True and self.transform[n].get_distance(target) < r*r:
-                self.msl_f[n] = False
+            if self.charactor[n].has_hit_target(target, r):
+                self.charactor[n].clear()
                 return True
         return False
     
     def clear(self):
         for i in range(self.MISSILE_MAX):
-            self.msl_f[i] = False
-    
-    def is_out_of_display(self,i):
-        if self.transform[i].position.y < 0 or self.transform[i].position.x < 0 or self.transform[i].position.x > 960:
-            return True
-        return False
+            self.charactor[i].clear()
 
 
 class effect:
@@ -335,8 +366,7 @@ class effect:
 
 class EnemyChara:
     def __init__(self):
-        self.emy_f = False
-        self.transform = Transform()
+        self.charactor = Charactor()
         self.emy_type = 0
         self.emy_shield = 0
         self.emy_count = 0
@@ -344,9 +374,8 @@ class EnemyChara:
         self.height = 0
         self.boss_state = 0
     
-    def set(self, x:int, y:int, angle:int, speed:int, type:int, shield:int, width:int, height:int):
-        self.emy_f = True
-        self.transform.set_position(x, y, angle, speed)
+    def set(self, x:int, y:int, direction:int, speed:int, type:int, shield:int, width:int, height:int):
+        self.charactor.set(x, y, direction, speed)
         self.emy_type = type
         self.emy_shield = shield
         self.emy_count = 0
@@ -354,30 +383,30 @@ class EnemyChara:
         self.height = height
     
     def clear(self):
-        self.emy_f = False
+        self.charactor.clear()
     
     def move(self):
-        self.transform.move()
-        if self.transform.position.x < LINE_L or LINE_R < self.transform.position.x or self.transform.position.y < LINE_T or LINE_B < self.transform.position.y:
-            self.clear()
+        self.charactor.move()
+        if self.charactor.is_out_of_display():
+            self.charactor.clear()
     
     def move_boss(self, tmr):
         shot = 0
         if self.boss_state == 0:
-            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_DOWN, 2)
-            self.transform.move()
-            if self.transform.position.y >= 200:
+            self.charactor.change_moving(DIRECTION_DOWN, 2)
+            self.charactor.move()
+            if self.charactor.transform.position.y >= 200:
                 self.boss_state = 1
         elif self.boss_state == 1:
-            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_LEFT, self.transform.speed)
-            self.transform.move()
-            if self.transform.position.x < 200:
+            self.charactor.change_moving(DIRECTION_LEFT, self.charactor.transform.speed)
+            self.charactor.move()
+            if self.charactor.transform.position.x < 200:
                 shot = 2
                 self.boss_state = 2
         else:
-            self.transform.set_position(self.transform.position.x, self.transform.position.y, DIRECTION_RIGHT, self.transform.speed)
-            self.transform.move()
-            if self.transform.position.x > 760:
+            self.charactor.change_moving(DIRECTION_RIGHT, self.charactor.transform.speed)
+            self.charactor.move()
+            if self.charactor.transform.position.x > 760:
                 shot = 2
                 self.boss_state = 1
             if self.emy_shield < 100 and tmr%30 == 0:
@@ -385,10 +414,11 @@ class EnemyChara:
         return shot
     
     def has_hit_and_run(self):
-        if self.emy_type == 4: #進行方向を変える敵
-            if self.transform.position.y > 240 and self.transform.direction == DIRECTION_DOWN:
-                self.transform.direction = random.choice([50,70,110,130])
-                return True
+        if self.charactor.now_disp:
+            if self.emy_type == 4: #進行方向を変える敵
+                if self.charactor.transform.position.y > 240 and self.charactor.transform.direction == DIRECTION_DOWN:
+                    self.charactor.change_moving(random.choice([50,70,110,130]), self.charactor.transform.speed)
+                    return True
         return False
     
     def get_hit_area(self):
@@ -396,39 +426,46 @@ class EnemyChara:
         return r
     
     def has_hit_player(self, player:Position):
-        if self.emy_f == True:
-            r = int((self.width+self.height)/4 + (74+96)/4)
-            if self.transform.get_distance(player) < r*r:
-                if self.emy_type < EMY_BOSS:
-                    self.clear()
-                return True
+        r = int((self.width+self.height)/4 + (74+96)/4)
+        if self.charactor.has_hit_target(player, r):
+            if self.emy_type < EMY_BOSS:
+                self.charactor.clear()
+            return True
         return False
 
     def explode(self, eff:effect):
         er = int((self.width+self.height)/4)
-        eff.set_effect(self.transform.position.x+random.randint(-er, er), self.transform.position.y+random.randint(-er, er))
+        eff.set_effect(self.charactor.transform.position.x+random.randint(-er, er), self.charactor.transform.position.y+random.randint(-er, er))
     
     def draw(self, scrn, image):
-        self.emy_count = self.emy_count + 1
-        if self.emy_type == 4: #進行方向を変える敵
-            ang = self.emy_count*10
+        if self.emy_type == EMY_BOSS:
+            self.charactor.draw(scrn, image, DIRECTION_DOWN)
         else:
-            ang = -90-self.transform.direction
-        img_rz = pygame.transform.rotozoom(image, ang, 1.0)
-        scrn.blit(img_rz, [self.transform.position.x-img_rz.get_width()/2, self.transform.position.y-img_rz.get_height()/2])
+            self.emy_count = self.emy_count + 1
+            if self.emy_type == 4: #進行方向を変える敵
+                angle = self.emy_count*10
+            else:
+                angle = self.charactor.transform.direction
+            self.charactor.draw(scrn, image, angle)
+    
+    def draw_boss(self, scrn, image):
+        self.charactor.draw(scrn, image, DIRECTION_DOWN)
     
     def is_defeat(self):
         self.emy_shield = self.emy_shield - 1
         if self.emy_shield == 0:
-            self.clear()
+            self.charactor.clear()
             return True
         return False
     
-    def get_shoot_param(self, direction:int):
-        transform = Transform()
-        transform.set_position(self.transform.position.x, self.transform.position.y, direction, 6)
-        return transform
-
+    def get_position(self):
+        return self.charactor.transform.position
+    
+    def get_boss_shoot_position(self):
+        position = Position()
+        position.set(self.charactor.transform.position.x, self.charactor.transform.position.y+80)
+        return position
+    
 
 class enemy:
     def __init__(self):
@@ -489,17 +526,17 @@ class enemy:
 
     def set_enemy(self, x, y, a, ty, sp, sh): #敵機をセットする
         while True:
-            if self.charactor[self.emy_no].emy_f == False:
+            if self.charactor[self.emy_no].charactor.now_disp == False:
                 self.charactor[self.emy_no].set(x, y, a, sp, ty, sh, self.img_enemy[ty].get_width(), self.img_enemy[ty].get_height())
                 break
             self.emy_no = (self.emy_no+1)%self.ENEMY_MAX
     
-    def shoot_once(self, x, y, direction):
-        self.set_enemy(x, y, direction, EMY_BULLET, 6, 0)
+    def shoot_once(self, position:Position, direction):
+        self.set_enemy(position.x, position.y, direction, EMY_BULLET, 6, 0)
 
-    def shoot_barrage(self, x, y):
+    def shoot_barrage(self, position:Position):
         for j in range(0, 10):
-            self.set_enemy(x, y, j*20, EMY_BULLET, 6, 0)
+            self.set_enemy(position.x, position.y, j*20, EMY_BULLET, 6, 0)
 
     def defeat_boss(self, i, eff):
         self.boss_defeated = True
@@ -508,33 +545,28 @@ class enemy:
         self.se_explosion.play()
     
     def draw(self, i, scrn, flash:bool):
-        if self.charactor[i].emy_type == EMY_BOSS:
-            ang = DIRECTION_UP-DIRECTION_DOWN
-            png = self.charactor[i].emy_type
-            if flash:
-                png = EMY_BOSS + 1
-            img_rz = pygame.transform.rotozoom(self.img_enemy[png], ang, 1.0)
-            scrn.blit(img_rz, [self.charactor[i].transform.position.x-img_rz.get_width()/2, self.charactor[i].transform.position.y-img_rz.get_height()/2])
-        else:
-            self.charactor[i].draw(scrn, self.img_enemy[self.charactor[i].emy_type])
+        png = self.charactor[i].emy_type
+        if self.charactor[i].emy_type == EMY_BOSS and flash:
+            png = EMY_BOSS + 1
+        self.charactor[i].draw(scrn, self.img_enemy[png])
     
     def action(self ,scrn ,msl:missile ,eff:effect, shield:shield, score:score, tmr, inplay:bool): #敵機の移動
         for i in range(self.ENEMY_MAX):
-            if self.charactor[i].emy_f == True:
+            if self.charactor[i].charactor.now_disp:
                 flash = False
                 if self.charactor[i].emy_type < EMY_BOSS: #ザコの動き
                     if self.charactor[i].has_hit_and_run():
-                        self.shoot_once(self.charactor[i].transform.position.x, self.charactor[i].transform.position.y, DIRECTION_DOWN)
+                        self.shoot_once(self.charactor[i].get_position(), DIRECTION_DOWN)
                     self.charactor[i].move()
                 else: #ボスの動き
                     shot = self.charactor[i].move_boss(tmr)
                     if shot == 1:
-                        self.shoot_once(self.charactor[i].transform.position.x, self.charactor[i].transform.position.y+80, random.randint(60, 120))
+                        self.shoot_once(self.charactor[i].get_boss_shoot_position(), random.randint(60, 120))
                     elif shot == 2:
-                        self.shoot_barrage(self.charactor[i].transform.position.x, self.charactor[i].transform.position.y+80)
+                        self.shoot_barrage(self.charactor[i].get_boss_shoot_position())
                 
                 if self.charactor[i].emy_type != EMY_BULLET: #プレイヤーと玉とのヒットチェック
-                    if msl.has_hit_enemy(self.charactor[i].transform.position, self.charactor[i].get_hit_area()):
+                    if msl.has_hit_enemy(self.charactor[i].get_position(), self.charactor[i].get_hit_area()):
                         self.charactor[i].explode(eff)
                         if self.charactor[i].emy_type == EMY_BOSS: #ボスはフラッシュさせる
                             flash = True
@@ -619,10 +651,11 @@ def main(): #メインループ
         if idx == 1: #ゲームプレイ中
             ss.action(screen, key, msl, sld, tmr)
             if ss.is_muteki() == False:
-                if emy.has_hit_player(ss.transform.position): #敵とのヒットチェック
+                if emy.has_hit_player(ss.charactor.transform.position): #敵とのヒットチェック
                     ss.set_effect(eff)
                     sld.down()
                     if sld.is_zero():
+                        ss.hide()
                         idx = 2
                         tmr = 0
                     ss.take_damage()
