@@ -131,7 +131,7 @@ class Position:
         self.x = 0
         self.y = 0
     
-    def set(self, x, y):
+    def set(self, x:int, y:int):
         self.x = x
         self.y = y
     
@@ -195,6 +195,9 @@ class Charactor:
     def has_hit_target(self, target:Position, r):
         if self.now_disp and self.transform.get_distance(target) < r*r:
             return True
+    
+    def get_position(self):
+        return self.transform.position
 
 
 class effect:
@@ -243,43 +246,51 @@ class Starship:
         ]
         self.charactor = Charactor()
         self.ss_d = 0
-        self.key_spc = 0
-        self.key_z = 0
         self.ss_muteki = 0
         self.se_damage = pygame.mixer.Sound("sound_gl/damage.ogg")
+        self.draw_count = 0
     
     def initialize(self):
         self.charactor.set(480, 600, DIRECTION_UP, 20)
         self.ss_d = 0
         self.ss_muteki = 0
+        self.draw_count = 0
     
     def hide(self):
         self.charactor.clear()
     
-    def move(self, key):
+    def turn_return(self):
         self.ss_d = 0
-        if key[pygame.K_UP] == 1:
-            self.charactor.change_moving(DIRECTION_UP, 20)
-            self.charactor.move()
-            if self.charactor.transform.position.y < 80:
-                self.charactor.transform.position.y = 80
-        if key[pygame.K_DOWN] == 1:
-            self.charactor.change_moving(DIRECTION_DOWN, 20)
-            self.charactor.move()
-            if self.charactor.transform.position.y > 640:
-                self.charactor.transform.position.y = 640
-        if key[pygame.K_LEFT] == 1:
-            self.ss_d = 1
-            self.charactor.change_moving(DIRECTION_LEFT, 20)
-            self.charactor.move()
-            if self.charactor.transform.position.x < 40:
-                self.charactor.transform.position.x = 40
-        if key[pygame.K_RIGHT] == 1:
-            self.ss_d = 2
-            self.charactor.change_moving(DIRECTION_RIGHT, 20)
-            self.charactor.move()
-            if self.charactor.transform.position.x > 920:
-                self.charactor.transform.position.x = 920
+    
+    def turn_left(self):
+        self.ss_d = 1
+    
+    def turn_right(self):
+        self.ss_d = 2
+    
+    def move_up(self):
+        self.charactor.change_moving(DIRECTION_UP, 20)
+        self.charactor.move()
+        if self.charactor.transform.position.y < 80:
+            self.charactor.transform.position.y = 80
+    
+    def move_down(self):
+        self.charactor.change_moving(DIRECTION_DOWN, 20)
+        self.charactor.move()
+        if self.charactor.transform.position.y > 640:
+            self.charactor.transform.position.y = 640
+    
+    def move_left(self):
+        self.charactor.change_moving(DIRECTION_LEFT, 20)
+        self.charactor.move()
+        if self.charactor.transform.position.x < 40:
+            self.charactor.transform.position.x = 40
+    
+    def move_right(self):
+        self.charactor.change_moving(DIRECTION_RIGHT, 20)
+        self.charactor.move()
+        if self.charactor.transform.position.x > 920:
+            self.charactor.transform.position.x = 920
     
     def get_shoot_position(self):
         position = Position()
@@ -295,10 +306,11 @@ class Starship:
             missile.shoot_barrage(self.get_shoot_position())
             shield.down()
     
-    def draw(self, scrn, tmr):
+    def draw(self, scrn):
+        self.draw_count += 1
         if self.ss_muteki%2 == 0:
             if self.charactor.now_disp:
-                scrn.blit(self.img_sship[3], [self.charactor.transform.position.x-8, self.charactor.transform.position.y+40+(tmr%3)*2])
+                scrn.blit(self.img_sship[3], [self.charactor.transform.position.x-8, self.charactor.transform.position.y+40+(self.draw_count%3)*2])
             self.charactor.draw(scrn, self.img_sship[self.ss_d], DIRECTION_UP)
 
     def action(self, key, missile, shield): #自機の移動
@@ -312,8 +324,8 @@ class Starship:
             return True
         return False
     
-    def set_effect(self, effect): 
-        effect.set_effect(self.charactor.transform.position.x, self.charactor.transform.position.y)
+    def get_position(self):
+        return self.charactor.get_position() 
     
     def take_damage(self):
         if self.ss_muteki == 0:
@@ -325,6 +337,9 @@ class Starship:
             effect.explode(self.charactor.transform.position, 60)
         if tmr%10 == 0:
             self.se_damage.play()
+    
+    def does_live(self):
+        return self.charactor.now_disp
 
 
 class missile:
@@ -335,10 +350,31 @@ class missile:
         self.charactor = [Charactor() for _ in range(self.MISSILE_MAX)]
         self.se_shot = pygame.mixer.Sound("sound_gl/shot.ogg")
         self.se_barrage = pygame.mixer.Sound("sound_gl/barrage.ogg")
-    
+        self.shoot_wait = 0
+        self.barrage_key_old = False
+   
     def set(self, x, y, direction):
         self.charactor[self.msl_no].set(x, y, direction, 36)
         self.msl_no = (self.msl_no+1)%self.MISSILE_MAX
+    
+    def has_shoot(self, shoot_key:bool):
+        shoot = False
+        if shoot_key:
+            if self.shoot_wait <= 0:
+                shoot = True
+                self.shoot_wait = 5
+            else:
+                self.shoot_wait -= 1
+        else:
+            self.shoot_wait = 0
+        return shoot
+    
+    def has_barrage(self, barrage_key:bool):
+        barrage = False
+        if barrage_key and not self.barrage_key_old:
+            barrage = True
+        self.barrage_key_old = barrage_key
+        return barrage
 
     def shoot_once(self, position:Position):
         self.set(position.x, position.y, DIRECTION_UP)
@@ -383,18 +419,35 @@ class PlayerSide:
         self.msl.clear()
     
     def action(self, key):
-        self.ss.action(key, self.msl, self.sld)
+        if self.ss.does_live():
+            self.ss.turn_return()
+            if key[pygame.K_UP] == 1:
+                self.ss.move_up()
+            if key[pygame.K_DOWN] == 1:
+                self.ss.move_down()
+            if key[pygame.K_LEFT] == 1:
+                self.ss.turn_left()
+                self.ss.move_left()
+            if key[pygame.K_RIGHT] == 1:
+                self.ss.turn_right()
+                self.ss.move_right()
+            if self.msl.has_shoot(key[K_SPACE]):
+                self.msl.shoot_once(self.ss.get_shoot_position())
+            if self.msl.has_barrage(key[K_z]) and self.sld.can_shoot_barrage():
+                self.msl.shoot_barrage(self.ss.get_shoot_position())
+                self.sld.down()
         self.msl.action()
     
-    def draw(self, screen, tmr:int):
-        self.ss.draw(screen, tmr)
+    def draw(self, screen):
+        self.ss.draw(screen)
         self.msl.draw(screen)
     
     def is_defeated(self, emy, eff):
         defeated = False
         if self.ss.is_muteki() == False:
-            if emy.has_hit_player(self.ss.charactor.transform.position): #敵とのヒットチェック
-                self.ss.set_effect(eff)
+            ss_position = self.ss.get_position()
+            if emy.has_hit_player(ss_position): #敵とのヒットチェック
+                eff.set_effect(ss_position.x, ss_position.y)
                 self.sld.down()
                 if self.sld.is_zero():
                     self.ss.hide()
@@ -732,7 +785,7 @@ def main(): #メインループ
                 tmr = 0
         
         if idx != 0:
-            player.draw(screen, tmr)
+            player.draw(screen)
         eff.draw_effect(screen) #爆発の演出
         scr.draw(screen)
 
