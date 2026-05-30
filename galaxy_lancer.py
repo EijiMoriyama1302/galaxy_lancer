@@ -375,10 +375,8 @@ class PlayerSide:
         self.ss = Starship()
         self.msl = missile()
         self.sld = shield()
-        self.scr = score()
     
     def initialize(self):
-        self.scr.clear()
         self.ss.initialize()
         self.sld.initialize()
         self.msl.clear()
@@ -387,12 +385,9 @@ class PlayerSide:
         self.ss.action(key, self.msl, self.sld)
         self.msl.action()
     
-    def draw(self, screen, tmr:int, sield_disp:bool):
+    def draw(self, screen, tmr:int):
         self.ss.draw(screen, tmr)
         self.msl.draw(screen)
-        self.scr.draw(screen)
-        if sield_disp: #シールドの表示
-            self.sld.draw_shield(screen)
     
     def is_defeated(self, emy, eff):
         defeated = False
@@ -408,9 +403,6 @@ class PlayerSide:
     
     def explode_startship(self, effect:effect, tmr:int):
         self.ss.explode(effect, tmr)
-
-    def draw_new_record_text(self, screen):
-        self.scr.draw_new_record_text(screen)
 
 
 class EnemyChara:
@@ -599,7 +591,7 @@ class enemy:
             png = EMY_BOSS + 1
         self.charactor[i].draw(scrn, self.img_enemy[png])
     
-    def action(self ,scrn ,player:PlayerSide ,eff:effect, tmr, inplay:bool): #敵機の移動
+    def action(self ,scrn ,player:PlayerSide ,eff:effect, scr:score, tmr, inplay:bool): #敵機の移動
         for i in range(self.ENEMY_MAX):
             if self.charactor[i].charactor.now_disp:
                 flash = False
@@ -619,7 +611,7 @@ class enemy:
                         self.charactor[i].explode(eff)
                         if self.charactor[i].emy_type == EMY_BOSS: #ボスはフラッシュさせる
                             flash = True
-                        player.scr.up(100)
+                        scr.up(100)
                         if self.charactor[i].is_defeat():
                             player.sld.heal()
                             if self.charactor[i].emy_type == EMY_BOSS and inplay: #ボスを倒すとクリア
@@ -661,6 +653,7 @@ def main(): #メインループ
     ttl = title()
     bg = background("image_gl/galaxy.png")
     player = PlayerSide()
+    scr = score()
     emy = enemy()
     eff = effect()
 
@@ -687,6 +680,7 @@ def main(): #メインループ
                 idx = 1
                 tmr = 0
                 player.initialize()
+                scr.clear()
                 emy.clear()
                 pygame.mixer.music.load("sound_gl/bgm.ogg")
                 pygame.mixer.music.play(-1)
@@ -697,14 +691,14 @@ def main(): #メインループ
                 idx = 2
                 tmr = 0
             emy.bring(tmr)
-            emy.action(screen,player,eff,tmr,True)
+            emy.action(screen,player,eff,scr,tmr,True)
             if emy.is_boss_defeated():
                 idx = 3
                 tmr = 0
         
         if idx == 2: #ゲームオーバー
             player.action(key)
-            emy.action(screen,player,eff,tmr,False)
+            emy.action(screen,player,eff,scr,tmr,False)
             if tmr == 1:
                 pygame.mixer.music.stop()
             if tmr <= 90:
@@ -714,7 +708,7 @@ def main(): #メインループ
                 pygame.mixer.music.play(0)
             if tmr > 120:
                 draw_text(screen, "GAME OVER", 480, 300, 80, RED)
-                player.draw_new_record_text(screen)
+                scr.draw_new_record_text(screen)
             if tmr == 400:
                 idx = 0
                 tmr = 0
@@ -731,13 +725,15 @@ def main(): #メインループ
                 pygame.mixer.music.play(0)
             if tmr > 120:
                 draw_text(screen, "GAME CLEAR", 480, 300, 80, SILVER)
-                player.draw_new_record_text(screen)
+                scr.draw_new_record_text(screen)
             if tmr == 400:
                 idx = 0
                 tmr = 0
         
-        player.draw(screen, tmr, idx != 0)
+        if idx != 0:
+            player.draw(screen, tmr)
         eff.draw_effect(screen) #爆発の演出
+        scr.draw(screen)
 
         pygame.display.update()
         clock.tick(30)
