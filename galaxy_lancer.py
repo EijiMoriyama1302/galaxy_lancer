@@ -197,7 +197,42 @@ class Charactor:
             return True
 
 
-class player:
+class effect:
+    def __init__(self):
+        self.img_explode = [
+            None,
+            pygame.image.load("image_gl/explosion1.png"),
+            pygame.image.load("image_gl/explosion2.png"),
+            pygame.image.load("image_gl/explosion3.png"),
+            pygame.image.load("image_gl/explosion4.png"),
+            pygame.image.load("image_gl/explosion5.png")
+        ]
+        self.EFFECT_MAX = 100
+        self.eff_no = 0
+        self.eff_p  = [0]*self.EFFECT_MAX
+        self.position = [Position() for _ in range(self.EFFECT_MAX)]
+
+    def set_effect(self, x, y): #爆発をセットする
+        self.eff_p[self.eff_no] = 1
+        self.position[self.eff_no].set(x, y)
+        self.eff_no = (self.eff_no+1)%self.EFFECT_MAX
+    
+    def draw(self, i, scrn):
+        if self.eff_p[i] > 0:
+            scrn.blit(self.img_explode[self.eff_p[i]], [self.position[i].x-48, self.position[i].y-48])
+            self.eff_p[i] = self.eff_p[i] + 1
+            if self.eff_p[i] == 6:
+                self.eff_p[i] = 0
+
+    def draw_effect(self,scrn): #爆発の演出
+        for i in range(self.EFFECT_MAX):
+            self.draw(i, scrn)
+    
+    def explode(self, position:Position, effect_range:int):
+        self.set_effect(position.x+random.randint(-effect_range, effect_range), position.y+random.randint(-effect_range, effect_range))
+
+
+class Starship:
     def __init__(self):
         #画面の読み込み
         self.img_sship = [
@@ -262,13 +297,13 @@ class player:
     
     def draw(self, scrn, tmr):
         if self.ss_muteki%2 == 0:
-            scrn.blit(self.img_sship[3], [self.charactor.transform.position.x-8, self.charactor.transform.position.y+40+(tmr%3)*2])
+            if self.charactor.now_disp:
+                scrn.blit(self.img_sship[3], [self.charactor.transform.position.x-8, self.charactor.transform.position.y+40+(tmr%3)*2])
             self.charactor.draw(scrn, self.img_sship[self.ss_d], DIRECTION_UP)
 
-    def action(self, scrn, key, missile, shield, tmr): #自機の移動
+    def action(self, key, missile, shield): #自機の移動
         self.move(key)
         self.shoot_missile(key, missile, shield)
-        self.draw(scrn, tmr)
     
     def is_muteki(self):
         if self.ss_muteki > 0:
@@ -284,9 +319,9 @@ class player:
             self.ss_muteki = 60
             self.se_damage.play()
     
-    def explode(self, effect, tmr):
+    def explode(self, effect:effect, tmr:int):
         if tmr%5 == 0:
-            effect.set_effect(self.charactor.transform.position.x+random.randint(-60,60), self.charactor.transform.position.y+random.randint(-60,60))
+            effect.explode(self.charactor.transform.position, 60)
         if tmr%10 == 0:
             self.se_damage.play()
 
@@ -313,11 +348,14 @@ class missile:
             self.set(position.x, position.y, a)
         self.se_barrage.play()
     
-    def action(self, scrn): #球の移動
+    def action(self): #球の移動
         for i in range(self.MISSILE_MAX):
             self.charactor[i].transform.move()
             if self.charactor[i].is_out_of_display():
                 self.charactor[i].clear()
+    
+    def draw(self, scrn):
+        for i in range(self.MISSILE_MAX):
             self.charactor[i].draw(scrn, self.img_weapon, self.charactor[i].transform.direction)
     
     def has_hit_enemy(self, target:Position, r):
@@ -332,36 +370,47 @@ class missile:
             self.charactor[i].clear()
 
 
-class effect:
+class PlayerSide:
     def __init__(self):
-        self.img_explode = [
-            None,
-            pygame.image.load("image_gl/explosion1.png"),
-            pygame.image.load("image_gl/explosion2.png"),
-            pygame.image.load("image_gl/explosion3.png"),
-            pygame.image.load("image_gl/explosion4.png"),
-            pygame.image.load("image_gl/explosion5.png")
-        ]
-        self.EFFECT_MAX = 100
-        self.eff_no = 0
-        self.eff_p  = [0]*self.EFFECT_MAX
-        self.position = [Position() for _ in range(self.EFFECT_MAX)]
-
-    def set_effect(self, x, y): #爆発をセットする
-        self.eff_p[self.eff_no] = 1
-        self.position[self.eff_no].set(x, y)
-        self.eff_no = (self.eff_no+1)%self.EFFECT_MAX
+        self.ss = Starship()
+        self.msl = missile()
+        self.sld = shield()
+        self.scr = score()
     
-    def draw(self, i, scrn):
-        if self.eff_p[i] > 0:
-            scrn.blit(self.img_explode[self.eff_p[i]], [self.position[i].x-48, self.position[i].y-48])
-            self.eff_p[i] = self.eff_p[i] + 1
-            if self.eff_p[i] == 6:
-                self.eff_p[i] = 0
+    def initialize(self):
+        self.scr.clear()
+        self.ss.initialize()
+        self.sld.initialize()
+        self.msl.clear()
+    
+    def action(self, key):
+        self.ss.action(key, self.msl, self.sld)
+        self.msl.action()
+    
+    def draw(self, screen, tmr:int, sield_disp:bool):
+        self.ss.draw(screen, tmr)
+        self.msl.draw(screen)
+        self.scr.draw(screen)
+        if sield_disp: #シールドの表示
+            self.sld.draw_shield(screen)
+    
+    def is_defeated(self, emy, eff):
+        defeated = False
+        if self.ss.is_muteki() == False:
+            if emy.has_hit_player(self.ss.charactor.transform.position): #敵とのヒットチェック
+                self.ss.set_effect(eff)
+                self.sld.down()
+                if self.sld.is_zero():
+                    self.ss.hide()
+                    defeated = True
+                self.ss.take_damage()
+        return defeated
+    
+    def explode_startship(self, effect:effect, tmr:int):
+        self.ss.explode(effect, tmr)
 
-    def draw_effect(self,scrn): #爆発の演出
-        for i in range(self.EFFECT_MAX):
-            self.draw(i, scrn)
+    def draw_new_record_text(self, screen):
+        self.scr.draw_new_record_text(screen)
 
 
 class EnemyChara:
@@ -435,7 +484,7 @@ class EnemyChara:
 
     def explode(self, eff:effect):
         er = int((self.width+self.height)/4)
-        eff.set_effect(self.charactor.transform.position.x+random.randint(-er, er), self.charactor.transform.position.y+random.randint(-er, er))
+        eff.explode(self.charactor.transform.position, er)
     
     def draw(self, scrn, image):
         if self.emy_type == EMY_BOSS:
@@ -611,12 +660,9 @@ def main(): #メインループ
 
     ttl = title()
     bg = background("image_gl/galaxy.png")
-    ss = player()
-    msl = missile()
+    player = PlayerSide()
     emy = enemy()
     eff = effect()
-    sld = shield()
-    scr = score()
 
     while True:
         tmr = tmr + 1
@@ -640,54 +686,43 @@ def main(): #メインループ
             if key[K_SPACE] == 1:
                 idx = 1
                 tmr = 0
-                scr.clear()
-                ss.initialize()
-                sld.initialize()
+                player.initialize()
                 emy.clear()
-                msl.clear()
                 pygame.mixer.music.load("sound_gl/bgm.ogg")
                 pygame.mixer.music.play(-1)
             
         if idx == 1: #ゲームプレイ中
-            ss.action(screen, key, msl, sld, tmr)
-            if ss.is_muteki() == False:
-                if emy.has_hit_player(ss.charactor.transform.position): #敵とのヒットチェック
-                    ss.set_effect(eff)
-                    sld.down()
-                    if sld.is_zero():
-                        ss.hide()
-                        idx = 2
-                        tmr = 0
-                    ss.take_damage()
-            msl.action(screen)
+            player.action(key)
+            if player.is_defeated(emy, eff):
+                idx = 2
+                tmr = 0
             emy.bring(tmr)
-            emy.action(screen,msl,eff,sld,scr,tmr,True)
+            emy.action(screen,player.msl,eff,player.sld,player.scr,tmr,True)
             if emy.is_boss_defeated():
                 idx = 3
                 tmr = 0
 
         
         if idx == 2: #ゲームオーバー
-            msl.action(screen)
-            emy.action(screen,msl,eff,sld,scr,tmr,False)
+            player.action(key)
+            emy.action(screen,player.msl,eff,player.sld,player.scr,tmr,False)
             if tmr == 1:
                 pygame.mixer.music.stop()
             if tmr <= 90:
-                ss.explode(eff, tmr)
+                player.explode_startship(eff, tmr)
             if tmr == 120:
                 pygame.mixer.music.load("sound_gl/gameover.ogg")
                 pygame.mixer.music.play(0)
             if tmr > 120:
                 draw_text(screen, "GAME OVER", 480, 300, 80, RED)
-                scr.draw_new_record_text(screen)
+                player.draw_new_record_text(screen)
             if tmr == 400:
                 idx = 0
                 tmr = 0
         
         if idx == 3: #ゲームクリア
-            ss.action(screen, key, msl, sld, tmr)
-            ss.is_muteki()
-            msl.action(screen)
+            player.action(key)
+            player.ss.is_muteki()
             if tmr == 1:
                 pygame.mixer.music.stop()
             if tmr < 30 and tmr%2 == 0:
@@ -697,15 +732,13 @@ def main(): #メインループ
                 pygame.mixer.music.play(0)
             if tmr > 120:
                 draw_text(screen, "GAME CLEAR", 480, 300, 80, SILVER)
-                scr.draw_new_record_text(screen)
+                player.draw_new_record_text(screen)
             if tmr == 400:
                 idx = 0
                 tmr = 0
         
+        player.draw(screen, tmr, idx != 0)
         eff.draw_effect(screen) #爆発の演出
-        scr.draw(screen)
-        if idx != 0: #シールドの表示
-            sld.draw_shield(screen)
 
         pygame.display.update()
         clock.tick(30)
