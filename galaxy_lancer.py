@@ -599,7 +599,7 @@ class enemy:
             png = EMY_BOSS + 1
         self.charactor[i].draw(scrn, self.img_enemy[png])
     
-    def action(self ,scrn ,msl:missile ,eff:effect, shield:shield, score:score, tmr, inplay:bool): #敵機の移動
+    def action(self ,scrn ,player:PlayerSide ,eff:effect, tmr, inplay:bool): #敵機の移動
         for i in range(self.ENEMY_MAX):
             if self.charactor[i].charactor.now_disp:
                 flash = False
@@ -615,13 +615,13 @@ class enemy:
                         self.shoot_barrage(self.charactor[i].get_boss_shoot_position())
                 
                 if self.charactor[i].emy_type != EMY_BULLET: #プレイヤーと玉とのヒットチェック
-                    if msl.has_hit_enemy(self.charactor[i].get_position(), self.charactor[i].get_hit_area()):
+                    if player.msl.has_hit_enemy(self.charactor[i].get_position(), self.charactor[i].get_hit_area()):
                         self.charactor[i].explode(eff)
                         if self.charactor[i].emy_type == EMY_BOSS: #ボスはフラッシュさせる
                             flash = True
-                        score.up(100)
+                        player.scr.up(100)
                         if self.charactor[i].is_defeat():
-                            shield.heal()
+                            player.sld.heal()
                             if self.charactor[i].emy_type == EMY_BOSS and inplay: #ボスを倒すとクリア
                                 self.defeat_boss(i, eff)
                     
@@ -697,15 +697,14 @@ def main(): #メインループ
                 idx = 2
                 tmr = 0
             emy.bring(tmr)
-            emy.action(screen,player.msl,eff,player.sld,player.scr,tmr,True)
+            emy.action(screen,player,eff,tmr,True)
             if emy.is_boss_defeated():
                 idx = 3
                 tmr = 0
-
         
         if idx == 2: #ゲームオーバー
             player.action(key)
-            emy.action(screen,player.msl,eff,player.sld,player.scr,tmr,False)
+            emy.action(screen,player,eff,tmr,False)
             if tmr == 1:
                 pygame.mixer.music.stop()
             if tmr <= 90:
