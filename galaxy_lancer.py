@@ -302,8 +302,9 @@ class Starship:
             self.charactor.draw(scrn, self.img_sship[self.ss_d], DIRECTION_UP)
 
     def action(self, key, missile, shield): #自機の移動
-        self.move(key)
-        self.shoot_missile(key, missile, shield)
+        if self.charactor.now_disp:
+            self.move(key)
+            self.shoot_missile(key, missile, shield)
     
     def is_muteki(self):
         if self.ss_muteki > 0:
